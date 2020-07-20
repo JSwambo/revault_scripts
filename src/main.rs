@@ -46,7 +46,7 @@ fn unvault_policy(
     let cosigners_thres = Policy::Threshold(pubkeys.len(), pubkeys);
 
     // FIXME CSV value
-    let cosigners_and_csv = Policy::And(vec![cosigners_thres, Policy::After(100)]);
+    let cosigners_and_csv = Policy::And(vec![cosigners_thres, Policy::Older(100)]);
 
     let cosigners_or_non_spenders =
         Policy::Or(vec![(9, cosigners_and_csv), (1, non_spenders_thres)]);
