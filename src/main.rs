@@ -126,6 +126,57 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     Ok(())
 }
 
+fn all_spenders_err(n_participants: usize, n_spenders: &mut usize) -> bool {
+    for i in *n_spenders..n_participants {
+        let (_, unvault_policy) = get_policies(n_participants, i);
+        if let Ok(_) = unvault_policy.compile::<miniscript::Segwitv0>() {
+            *n_spenders = i;
+            return false;
+        }
+    }
+
+    true
+}
+
+fn display_all() {
+    let (mut n_participants, mut n_spenders) = (2, 1);
+
+    loop {
+        loop {
+            // FIXME: get only the unvault policy
+            let (_, unvault_policy) = get_policies(n_participants, n_spenders);
+
+            if let Ok(unvault_script) = unvault_policy.compile::<miniscript::Segwitv0>() {
+                println!(
+                    "{},{},{}",
+                    n_participants,
+                    n_spenders,
+                    unvault_script.max_satisfaction_size(2)
+                );
+                n_spenders += 1;
+                continue;
+            }
+
+            break;
+        }
+
+        // For pm3d
+        println!("\n");
+
+        n_participants += 1;
+        n_spenders = n_participants - n_spenders;
+
+        let (_, unvault_policy) = get_policies(n_participants, n_spenders);
+        // Hmm, we cannot find a standard Script with a minimal amount of spenders..
+        if let Err(_) = unvault_policy.compile::<miniscript::Segwitv0>() {
+            // .. But is there really no possible one ?
+            if all_spenders_err(n_participants, &mut n_spenders) {
+                break;
+            }
+        }
+    }
+}
+
 fn parse_args(args: &Vec<String>) -> bool {
     if args.len() < 2 || args[1].eq_ignore_ascii_case("help") {
         return false;
@@ -139,6 +190,7 @@ fn parse_args(args: &Vec<String>) -> bool {
 
         if let Ok(n_participants) = args[2].parse::<usize>() {
             if let Ok(n_spenders) = args[3].parse::<usize>() {
+                // FIXME: Allow n_spenders == n_participants (need to change cosigner logic)
                 if n_spenders >= n_participants || n_spenders < 1 {
                     eprintln!("Invalid number of participants and/or spenders..");
                     return false;
@@ -155,24 +207,23 @@ fn parse_args(args: &Vec<String>) -> bool {
             eprintln!("The number of participants must be a number..");
             return false;
         }
+    } else if args[1].eq_ignore_ascii_case("getall") {
+        display_all();
     }
 
     true
 }
 
 fn show_usage(args: &[String]) {
-    println!(
-        "{} [help | getone | getall] (number of participants) (number of spenders)",
-        args[0]
-    );
+    println!("{} [help | getone | getall] (params)", args[0]);
     println!("  help: prints this message.");
     println!(
-        "  getone [number of participants] [number of spenders]: get the vault\
+        "  getone [number of participants] [number of spenders]: get the vault \
         and unvault script and policy for this configuration."
     );
     println!(
-        "  getall: get all possible configurations and their witness' weight as\
-        points like (n_p, n_s, WU) TO BE IMPL (tm)."
+        "  getall: get all possible unvault configurations and theirwitness' \
+        weight as plots (n_part, n_spenders, WU)."
     );
 }
 
