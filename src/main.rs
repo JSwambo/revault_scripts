@@ -129,7 +129,7 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
 fn all_spenders_err(n_participants: usize, n_spenders: &mut usize) -> bool {
     for i in *n_spenders..n_participants {
         let (_, unvault_policy) = get_policies(n_participants, i);
-        if let Ok(_) = unvault_policy.compile::<miniscript::Segwitv0>() {
+        if unvault_policy.compile::<miniscript::Segwitv0>().is_ok() {
             *n_spenders = i;
             return false;
         }
@@ -168,7 +168,7 @@ fn display_all() {
 
         let (_, unvault_policy) = get_policies(n_participants, n_spenders);
         // Hmm, we cannot find a standard Script with a minimal amount of spenders..
-        if let Err(_) = unvault_policy.compile::<miniscript::Segwitv0>() {
+        if unvault_policy.compile::<miniscript::Segwitv0>().is_err() {
             // .. But is there really no possible one ?
             if all_spenders_err(n_participants, &mut n_spenders) {
                 break;
