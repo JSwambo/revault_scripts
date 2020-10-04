@@ -28,9 +28,9 @@ fn get_miniscripts(
     Box<dyn std::error::Error>,
 > {
     let (mut non_spenders, mut spenders, mut cosigners) = (
-        Vec::<PublicKey>::new(),
-        Vec::<PublicKey>::new(),
-        Vec::<PublicKey>::new(),
+        Vec::<PublicKey>::with_capacity(n_participants - n_spenders),
+        Vec::<PublicKey>::with_capacity(n_spenders),
+        Vec::<PublicKey>::with_capacity(n_participants - n_spenders),
     );
 
     for _ in 0..n_spenders {
@@ -88,9 +88,39 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     Ok(())
 }
 
+// This assumes all managers are stakeholders
+fn custom_unvault_descriptor(
+    n_participants: usize,
+    n_managers: usize,
+) -> Result<Descriptor<PublicKey>, revault_tx::Error> {
+    let managers_pks: Vec<PublicKey> = (0..n_managers).map(|_| get_random_pubkey()).collect();
+    let non_managers_pks: Vec<PublicKey> = (n_managers..n_participants)
+        .map(|_| get_random_pubkey())
+        .collect();
+    let cosigners_pks: Vec<PublicKey> = (n_managers..n_participants)
+        .map(|_| get_random_pubkey())
+        .collect();
+
+    raw_unvault_descriptor(
+        managers_pks
+            .iter()
+            .chain(non_managers_pks.iter())
+            .cloned()
+            .collect(),
+        n_participants,
+        1,
+        managers_pks,
+        n_managers,
+        cosigners_pks,
+        n_participants - n_managers,
+        32,
+        10,
+    )
+}
+
 fn find_next_n_spenders(n_participants: usize, n_spenders: usize) -> Option<usize> {
     for i in n_spenders..n_participants {
-        if get_miniscripts(n_participants, i).is_ok() {
+        if custom_unvault_descriptor(n_participants, i).is_ok() {
             return Some(i);
         }
     }
@@ -104,12 +134,12 @@ fn display_all() {
     loop {
         loop {
             // FIXME: get only the unvault policy
-            if let Ok((_, unvault_ms)) = get_miniscripts(n_participants, n_spenders) {
+            if let Ok(unvault_ms) = custom_unvault_descriptor(n_participants, n_spenders) {
                 println!(
                     "{},{},{}",
                     n_participants,
                     n_spenders,
-                    unvault_ms.max_satisfaction_size(2)
+                    unvault_ms.max_satisfaction_weight()
                 );
                 n_spenders += 1;
                 continue;
