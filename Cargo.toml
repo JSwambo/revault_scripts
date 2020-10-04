@@ -6,6 +6,6 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7.3"
-bitcoin = "0.23.0"
-secp256k1 = { version = "0.17.2" }
-miniscript = { version = "1.0.0", features = ["compiler"] }
+bitcoin = "0.24"
+miniscript = "2.0.0"
+revault_tx = { git = "https://github.com/re-vault/revault_tx" }

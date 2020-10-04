@@ -1,58 +1,8 @@
-use bitcoin::PublicKey;
-use miniscript::policy::concrete::Policy;
+use revault_tx::scripts::*;
+
+use bitcoin::{secp256k1, PublicKey};
+use miniscript::{Descriptor, Miniscript, Segwitv0};
 use rand::RngCore;
-
-// The vault policy is an N-of-N, so thresh(len(pubkeys), pubkeys)
-fn vault_policy(participants: Vec<PublicKey>) -> Policy<PublicKey> {
-    let pubkeys = participants
-        .iter()
-        .map(|pubkey| Policy::Key(*pubkey))
-        .collect::<Vec<Policy<PublicKey>>>();
-
-    Policy::Threshold(pubkeys.len(), pubkeys)
-}
-
-// The unvault policy is a bit more involved.  It allows either all the participants to spend, or
-// all the spenders + cosigners + a timelock.
-// As the spenders are part of the participants we can have a more efficient Script by expliciting
-// to the compiler that the spenders are always going to sign.
-// Thus we end up with:
-// and(thresh(len(spenders), spenders), or(thresh(len(non_spenders), non_spenders),
-// and(thresh(len(cosigners), cosigners), older(X))))
-// As we expect the usual operations to be far more likely, we further optimize the policy to:
-// and(thresh(len(spenders), spenders), or(1@thresh(len(non_spenders), non_spenders),
-// 9@and(thresh(len(cosigners), cosigners), older(X))))
-fn unvault_policy(
-    non_spenders: Vec<PublicKey>,
-    spenders: Vec<PublicKey>,
-    cosigners: Vec<PublicKey>,
-) -> Policy<PublicKey> {
-    let mut pubkeys = spenders
-        .iter()
-        .map(|pubkey| Policy::Key(*pubkey))
-        .collect::<Vec<Policy<PublicKey>>>();
-    let spenders_thres = Policy::Threshold(pubkeys.len(), pubkeys);
-
-    pubkeys = non_spenders
-        .iter()
-        .map(|pubkey| Policy::Key(*pubkey))
-        .collect::<Vec<Policy<PublicKey>>>();
-    let non_spenders_thres = Policy::Threshold(pubkeys.len(), pubkeys);
-
-    pubkeys = cosigners
-        .iter()
-        .map(|pubkey| Policy::Key(*pubkey))
-        .collect::<Vec<Policy<PublicKey>>>();
-    let cosigners_thres = Policy::Threshold(pubkeys.len(), pubkeys);
-
-    // FIXME CSV value
-    let cosigners_and_csv = Policy::And(vec![cosigners_thres, Policy::Older(100)]);
-
-    let cosigners_or_non_spenders =
-        Policy::Or(vec![(9, cosigners_and_csv), (1, non_spenders_thres)]);
-
-    Policy::And(vec![spenders_thres, cosigners_or_non_spenders])
-}
 
 fn get_random_pubkey() -> PublicKey {
     let secp = secp256k1::Secp256k1::new();
@@ -67,10 +17,16 @@ fn get_random_pubkey() -> PublicKey {
     }
 }
 
-fn get_policies(
+fn get_miniscripts(
     n_participants: usize,
     n_spenders: usize,
-) -> (Policy<PublicKey>, Policy<PublicKey>) {
+) -> Result<
+    (
+        Miniscript<PublicKey, Segwitv0>,
+        Miniscript<PublicKey, Segwitv0>,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let (mut non_spenders, mut spenders, mut cosigners) = (
         Vec::<PublicKey>::new(),
         Vec::<PublicKey>::new(),
@@ -90,21 +46,26 @@ fn get_policies(
     participants.extend(&non_spenders);
     participants.extend(&spenders);
 
-    (
-        vault_policy(participants),
-        unvault_policy(non_spenders, spenders, cosigners),
-    )
+    Ok((
+        match vault_descriptor(participants)?.0 {
+            Descriptor::Wsh(ms) => ms,
+            _ => unreachable!(),
+        },
+        match unvault_descriptor(non_spenders, spenders, cosigners, 144)?.0 {
+            Descriptor::Wsh(ms) => ms,
+            _ => unreachable!(),
+        },
+    ))
 }
 
 // Display the Bitcoin Script and Miniscript policy of the vault and unvault txout
 // scripts given the number of participants and the number of spenders of the vault.
 fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let (vault_policy, unvault_policy) = get_policies(n_participants, n_spenders);
-    let vault_script = vault_policy.compile::<miniscript::Segwitv0>()?;
-    let unvault_script = unvault_policy.compile::<miniscript::Segwitv0>()?;
+    let (vault_script, unvault_script) = get_miniscripts(n_participants, n_spenders).unwrap();
 
     println!("vault output:");
     println!("-------------");
+    println!("  Miniscript: {}", vault_script);
     println!("  Witness Program: {}", vault_script.encode());
     println!("  Program size: {} WU", vault_script.script_size());
     println!(
@@ -116,6 +77,7 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
 
     println!("unvault output:");
     println!("---------------");
+    println!("  Miniscript: {}", unvault_script);
     println!("  Witness Program: {}", unvault_script.encode());
     println!("  Program size: {} WU", unvault_script.script_size());
     println!(
@@ -126,16 +88,14 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     Ok(())
 }
 
-fn all_spenders_err(n_participants: usize, n_spenders: &mut usize) -> bool {
-    for i in *n_spenders..n_participants {
-        let (_, unvault_policy) = get_policies(n_participants, i);
-        if unvault_policy.compile::<miniscript::Segwitv0>().is_ok() {
-            *n_spenders = i;
-            return false;
+fn find_next_n_spenders(n_participants: usize, n_spenders: usize) -> Option<usize> {
+    for i in n_spenders..n_participants {
+        if get_miniscripts(n_participants, i).is_ok() {
+            return Some(i);
         }
     }
 
-    true
+    None
 }
 
 fn display_all() {
@@ -144,14 +104,12 @@ fn display_all() {
     loop {
         loop {
             // FIXME: get only the unvault policy
-            let (_, unvault_policy) = get_policies(n_participants, n_spenders);
-
-            if let Ok(unvault_script) = unvault_policy.compile::<miniscript::Segwitv0>() {
+            if let Ok((_, unvault_ms)) = get_miniscripts(n_participants, n_spenders) {
                 println!(
                     "{},{},{}",
                     n_participants,
                     n_spenders,
-                    unvault_script.max_satisfaction_size(2)
+                    unvault_ms.max_satisfaction_size(2)
                 );
                 n_spenders += 1;
                 continue;
@@ -164,15 +122,10 @@ fn display_all() {
         println!("\n");
 
         n_participants += 1;
-        n_spenders = n_participants - n_spenders;
-
-        let (_, unvault_policy) = get_policies(n_participants, n_spenders);
-        // Hmm, we cannot find a standard Script with a minimal amount of spenders..
-        if unvault_policy.compile::<miniscript::Segwitv0>().is_err() {
-            // .. But is there really no possible one ?
-            if all_spenders_err(n_participants, &mut n_spenders) {
-                break;
-            }
+        if let Some(found) = find_next_n_spenders(n_participants, n_participants - n_spenders) {
+            n_spenders = found;
+        } else {
+            break;
         }
     }
 }
