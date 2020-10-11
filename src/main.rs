@@ -51,7 +51,7 @@ fn get_miniscripts(
             Descriptor::Wsh(ms) => ms,
             _ => unreachable!(),
         },
-        match unvault_descriptor(non_spenders, spenders, cosigners, 144)?.0 {
+        match unvault_descriptor(non_spenders, spenders, n_spenders, cosigners, 144)?.0 {
             Descriptor::Wsh(ms) => ms,
             _ => unreachable!(),
         },
@@ -70,7 +70,7 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     println!("  Program size: {} WU", vault_script.script_size());
     println!(
         "  Witness size: {} WU",
-        vault_script.max_satisfaction_size(2)
+        vault_script.max_satisfaction_size().unwrap()
     );
 
     println!("\n======================\n");
@@ -82,7 +82,7 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     println!("  Program size: {} WU", unvault_script.script_size());
     println!(
         "  Witness size: {} WU",
-        unvault_script.max_satisfaction_size(2)
+        unvault_script.max_satisfaction_size().unwrap()
     );
 
     Ok(())
@@ -90,73 +90,56 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
 
 // This assumes all managers are stakeholders
 fn custom_unvault_descriptor(
-    n_participants: usize,
+    n_stakeholders: usize,
     n_managers: usize,
 ) -> Result<Descriptor<PublicKey>, revault_tx::Error> {
     let managers_pks: Vec<PublicKey> = (0..n_managers).map(|_| get_random_pubkey()).collect();
-    let non_managers_pks: Vec<PublicKey> = (n_managers..n_participants)
-        .map(|_| get_random_pubkey())
-        .collect();
-    let cosigners_pks: Vec<PublicKey> = (n_managers..n_participants)
-        .map(|_| get_random_pubkey())
-        .collect();
+    let stakeholders_pks: Vec<PublicKey> =
+        (0..n_stakeholders).map(|_| get_random_pubkey()).collect();
+    let cosigners_pks: Vec<PublicKey> = (0..n_stakeholders).map(|_| get_random_pubkey()).collect();
 
     raw_unvault_descriptor(
-        managers_pks
-            .iter()
-            .chain(non_managers_pks.iter())
-            .cloned()
-            .collect(),
-        n_participants,
+        stakeholders_pks,
+        n_stakeholders,
         1,
         managers_pks,
         n_managers,
         cosigners_pks,
-        n_participants - n_managers,
+        n_stakeholders,
         32,
         10,
     )
 }
 
-fn find_next_n_spenders(n_participants: usize, n_spenders: usize) -> Option<usize> {
-    for i in n_spenders..n_participants {
-        if custom_unvault_descriptor(n_participants, i).is_ok() {
-            return Some(i);
-        }
-    }
-
-    None
-}
-
 fn display_all() {
-    let (mut n_participants, mut n_spenders) = (2, 1);
+    let mut n_stakeholders = 1;
 
     loop {
-        loop {
-            // FIXME: get only the unvault policy
-            if let Ok(unvault_ms) = custom_unvault_descriptor(n_participants, n_spenders) {
-                println!(
-                    "{},{},{}",
-                    n_participants,
-                    n_spenders,
-                    unvault_ms.max_satisfaction_weight()
-                );
-                n_spenders += 1;
-                continue;
-            }
+        let all_desc: Vec<(usize, Descriptor<PublicKey>)> = (1..n_stakeholders + 1)
+            .filter_map(|n_managers| {
+                custom_unvault_descriptor(n_stakeholders, n_managers)
+                    .ok()
+                    .and_then(|desc| Some((n_managers, desc)))
+            })
+            .collect();
 
-            break;
+        if all_desc.is_empty() {
+            return;
+        }
+
+        for (n_managers, desc) in all_desc {
+            println!(
+                "{},{},{}",
+                n_stakeholders,
+                n_managers,
+                desc.max_satisfaction_weight().unwrap()
+            );
         }
 
         // For pm3d
         println!("\n");
 
-        n_participants += 1;
-        if let Some(found) = find_next_n_spenders(n_participants, n_participants - n_spenders) {
-            n_spenders = found;
-        } else {
-            break;
-        }
+        n_stakeholders += 1;
     }
 }
 

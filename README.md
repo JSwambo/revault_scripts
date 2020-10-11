@@ -24,10 +24,11 @@ unvault output:
 ```
 $ cargo run --release -- getall > all.csv
 $ gnuplot
-gnuplot> set datafile separator comma; set xlabel '# of participants'; set ylabel '# of spenders'; set zlabel 'size (WU)'; set pm3d at b;splot 'all.csv' using 1:2:3 with points palette pointsize 3 pointtype 5
+gnuplot> set datafile separator comma; set xlabel '# of stakeholders'; set ylabel '# of fund managers'; set zlabel 'size (WU)'; set pm3d at b;splot 'all.csv' using 1:2:3 with points palette pointsize 3 pointtype 5
 ```
 
+THIS GRAPH IS OUTDATED
 ![sample graph](graph.png)
 
-(To avoid the (ineffictient) regeneration of the CSV a sample is already committed as
+(To avoid the (ineffictient) regeneration of the CSV an (outdated) sample is already committed as
 [`all.csv`](all.csv)).

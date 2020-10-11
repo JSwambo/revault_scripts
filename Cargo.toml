@@ -7,5 +7,5 @@ edition = "2018"
 [dependencies]
 rand = "0.7.3"
 bitcoin = "0.24"
-miniscript = "2.0.0"
-revault_tx = { git = "https://github.com/re-vault/revault_tx" }
+miniscript = { git = "https://github.com/darosior/rust-miniscript", branch = "avoid_recursion"}
+revault_tx = { git = "https://github.com/darosior/revault", branch = "test_limits" }
