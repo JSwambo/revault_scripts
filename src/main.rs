@@ -1,8 +1,10 @@
 use revault_tx::scripts::*;
 
-use bitcoin::{secp256k1, PublicKey};
-use miniscript::{Descriptor, Miniscript, Segwitv0};
 use rand::RngCore;
+use revault_tx::{
+    bitcoin::{secp256k1, PublicKey},
+    miniscript::{Descriptor, Miniscript, NullCtx, Segwitv0},
+};
 
 fn get_random_pubkey() -> PublicKey {
     let secp = secp256k1::Secp256k1::new();
@@ -66,8 +68,8 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     println!("vault output:");
     println!("-------------");
     println!("  Miniscript: {}", vault_script);
-    println!("  Witness Program: {}", vault_script.encode());
-    println!("  Program size: {} WU", vault_script.script_size());
+    println!("  Witness Program: {}", vault_script.encode(NullCtx));
+    println!("  Program size: {} WU", vault_script.script_size(NullCtx));
     println!(
         "  Witness size: {} WU",
         vault_script.max_satisfaction_size().unwrap()
@@ -78,8 +80,8 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
     println!("unvault output:");
     println!("---------------");
     println!("  Miniscript: {}", unvault_script);
-    println!("  Witness Program: {}", unvault_script.encode());
-    println!("  Program size: {} WU", unvault_script.script_size());
+    println!("  Witness Program: {}", unvault_script.encode(NullCtx));
+    println!("  Program size: {} WU", unvault_script.script_size(NullCtx));
     println!(
         "  Witness size: {} WU",
         unvault_script.max_satisfaction_size().unwrap()
@@ -89,59 +91,59 @@ fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn s
 }
 
 // This assumes all managers are stakeholders
-fn custom_unvault_descriptor(
-    n_stakeholders: usize,
-    n_managers: usize,
-) -> Result<Descriptor<PublicKey>, revault_tx::Error> {
-    let managers_pks: Vec<PublicKey> = (0..n_managers).map(|_| get_random_pubkey()).collect();
-    let stakeholders_pks: Vec<PublicKey> =
-        (0..n_stakeholders).map(|_| get_random_pubkey()).collect();
-    let cosigners_pks: Vec<PublicKey> = (0..n_stakeholders).map(|_| get_random_pubkey()).collect();
+//fn custom_unvault_descriptor(
+//n_stakeholders: usize,
+//n_managers: usize,
+//) -> Result<Descriptor<PublicKey>, revault_tx::Error> {
+//let managers_pks: Vec<PublicKey> = (0..n_managers).map(|_| get_random_pubkey()).collect();
+//let stakeholders_pks: Vec<PublicKey> =
+//(0..n_stakeholders).map(|_| get_random_pubkey()).collect();
+//let cosigners_pks: Vec<PublicKey> = (0..n_stakeholders).map(|_| get_random_pubkey()).collect();
 
-    raw_unvault_descriptor(
-        stakeholders_pks,
-        n_stakeholders,
-        1,
-        managers_pks,
-        n_managers,
-        cosigners_pks,
-        n_stakeholders,
-        32,
-        10,
-    )
-}
+//raw_unvault_descriptor(
+//stakeholders_pks,
+//n_stakeholders,
+//1,
+//managers_pks,
+//n_managers,
+//cosigners_pks,
+//n_stakeholders,
+//32,
+//10,
+//)
+//}
 
-fn display_all() {
-    let mut n_stakeholders = 1;
+//fn display_all() {
+//let mut n_stakeholders = 1;
 
-    loop {
-        let all_desc: Vec<(usize, Descriptor<PublicKey>)> = (1..n_stakeholders + 1)
-            .filter_map(|n_managers| {
-                custom_unvault_descriptor(n_stakeholders, n_managers)
-                    .ok()
-                    .and_then(|desc| Some((n_managers, desc)))
-            })
-            .collect();
+//loop {
+//let all_desc: Vec<(usize, Descriptor<PublicKey>)> = (1..n_stakeholders + 1)
+//.filter_map(|n_managers| {
+//custom_unvault_descriptor(n_stakeholders, n_managers)
+//.ok()
+//.and_then(|desc| Some((n_managers, desc)))
+//})
+//.collect();
 
-        if all_desc.is_empty() {
-            return;
-        }
+//if all_desc.is_empty() {
+//return;
+//}
 
-        for (n_managers, desc) in all_desc {
-            println!(
-                "{},{},{}",
-                n_stakeholders,
-                n_managers,
-                desc.max_satisfaction_weight().unwrap()
-            );
-        }
+//for (n_managers, desc) in all_desc {
+//println!(
+//"{},{},{}",
+//n_stakeholders,
+//n_managers,
+//desc.max_satisfaction_weight().unwrap()
+//);
+//}
 
-        // For pm3d
-        println!("\n");
+//// For pm3d
+//println!("\n");
 
-        n_stakeholders += 1;
-    }
-}
+//n_stakeholders += 1;
+//}
+//}
 
 fn parse_args(args: &Vec<String>) -> bool {
     if args.len() < 2 || args[1].eq_ignore_ascii_case("help") {
@@ -156,7 +158,6 @@ fn parse_args(args: &Vec<String>) -> bool {
 
         if let Ok(n_participants) = args[2].parse::<usize>() {
             if let Ok(n_spenders) = args[3].parse::<usize>() {
-                // FIXME: Allow n_spenders == n_participants (need to change cosigner logic)
                 if n_spenders >= n_participants || n_spenders < 1 {
                     eprintln!("Invalid number of participants and/or spenders..");
                     return false;
@@ -174,7 +175,9 @@ fn parse_args(args: &Vec<String>) -> bool {
             return false;
         }
     } else if args[1].eq_ignore_ascii_case("getall") {
-        display_all();
+        eprintln!("Disabled"); // FIXME: fix display_all()
+        return false;
+        //display_all();
     }
 
     true
