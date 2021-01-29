@@ -2,7 +2,7 @@ use revault_tx::scripts::*;
 
 use rand::RngCore;
 use revault_tx::{
-    bitcoin::{secp256k1, PublicKey},
+    bitcoin::{hashes::hex::ToHex, secp256k1, PublicKey},
     miniscript::{Descriptor, Miniscript, NullCtx, Segwitv0},
 };
 
@@ -62,29 +62,43 @@ fn get_miniscripts(
 
 // Display the Bitcoin Script and Miniscript policy of the vault and unvault txout
 // scripts given the number of participants and the number of spenders of the vault.
+// Both are P2WSH so we display the Witness Script, as the Witness Program is not interesting.
 fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let (vault_script, unvault_script) = get_miniscripts(n_participants, n_spenders).unwrap();
+    let (vault_miniscript, unvault_miniscript) =
+        get_miniscripts(n_participants, n_spenders).unwrap();
+    let (vault_script, unvault_script) = (
+        vault_miniscript.encode(NullCtx),
+        unvault_miniscript.encode(NullCtx),
+    );
 
     println!("vault output:");
     println!("-------------");
-    println!("  Miniscript: {}", vault_script);
-    println!("  Witness Program: {}", vault_script.encode(NullCtx));
-    println!("  Program size: {} WU", vault_script.script_size(NullCtx));
+    println!("  Miniscript: {}", vault_miniscript);
+    println!("  Witness Script: {}", vault_script);
+    println!("  Raw Witness Script: {}", vault_script.to_hex());
+    println!(
+        "  Program size: {} WU",
+        vault_miniscript.script_size(NullCtx)
+    );
     println!(
         "  Witness size: {} WU",
-        vault_script.max_satisfaction_size().unwrap()
+        vault_miniscript.max_satisfaction_size().unwrap()
     );
 
     println!("\n======================\n");
 
     println!("unvault output:");
     println!("---------------");
-    println!("  Miniscript: {}", unvault_script);
-    println!("  Witness Program: {}", unvault_script.encode(NullCtx));
-    println!("  Program size: {} WU", unvault_script.script_size(NullCtx));
+    println!("  Miniscript: {}", unvault_miniscript);
+    println!("  Witness Script: {}", unvault_script);
+    println!("  Raw Witness Script: {}", unvault_script.to_hex());
+    println!(
+        "  Program size: {} WU",
+        unvault_miniscript.script_size(NullCtx)
+    );
     println!(
         "  Witness size: {} WU",
-        unvault_script.max_satisfaction_size().unwrap()
+        unvault_miniscript.max_satisfaction_size().unwrap()
     );
 
     Ok(())
