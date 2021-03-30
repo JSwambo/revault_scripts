@@ -21,7 +21,7 @@ fn get_random_pubkey() -> PublicKey {
 
 fn get_miniscripts(
     n_participants: usize,
-    n_spenders: usize,
+    n_man: usize,
 ) -> Result<
     (
         Miniscript<PublicKey, Segwitv0>,
@@ -29,31 +29,31 @@ fn get_miniscripts(
     ),
     Box<dyn std::error::Error>,
 > {
-    let (mut non_spenders, mut spenders, mut cosigners) = (
-        Vec::<PublicKey>::with_capacity(n_participants - n_spenders),
-        Vec::<PublicKey>::with_capacity(n_spenders),
-        Vec::<PublicKey>::with_capacity(n_participants - n_spenders),
+    let (mut non_man, mut man, mut cosigners) = (
+        Vec::<PublicKey>::with_capacity(n_participants - n_man),
+        Vec::<PublicKey>::with_capacity(n_man),
+        Vec::<PublicKey>::with_capacity(n_participants - n_man),
     );
 
-    for _ in 0..n_spenders {
-        spenders.push(get_random_pubkey());
+    for _ in 0..n_man {
+        man.push(get_random_pubkey());
     }
 
-    for _ in n_spenders..n_participants {
-        non_spenders.push(get_random_pubkey());
+    for _ in n_man..n_participants {
+        non_man.push(get_random_pubkey());
         cosigners.push(get_random_pubkey());
     }
 
     let mut participants = Vec::<PublicKey>::new();
-    participants.extend(&non_spenders);
-    participants.extend(&spenders);
+    participants.extend(&non_man);
+    participants.extend(&man);
 
     Ok((
         match deposit_descriptor(participants)?.0 {
             Descriptor::Wsh(ms) => ms,
             _ => unreachable!(),
         },
-        match unvault_descriptor(non_spenders, spenders, n_spenders, cosigners, 144)?.0 {
+        match unvault_descriptor(non_man, man, n_man, cosigners, 144)?.0 {
             Descriptor::Wsh(ms) => ms,
             _ => unreachable!(),
         },
@@ -61,11 +61,10 @@ fn get_miniscripts(
 }
 
 // Display the Bitcoin Script and Miniscript policy of the vault and unvault txout
-// scripts given the number of participants and the number of spenders of the vault.
+// scripts given the number of participants and the number of man of the vault.
 // Both are P2WSH so we display the Witness Script, as the Witness Program is not interesting.
-fn display_one(n_participants: usize, n_spenders: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let (vault_miniscript, unvault_miniscript) =
-        get_miniscripts(n_participants, n_spenders).unwrap();
+fn display_one(n_participants: usize, n_man: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let (vault_miniscript, unvault_miniscript) = get_miniscripts(n_participants, n_man).unwrap();
     let (vault_script, unvault_script) = (
         vault_miniscript.encode(NullCtx),
         unvault_miniscript.encode(NullCtx),
@@ -166,22 +165,22 @@ fn parse_args(args: &Vec<String>) -> bool {
 
     if args[1].eq_ignore_ascii_case("getone") {
         if args.len() < 4 {
-            eprintln!("I need the number of participants and spenders !!\n");
+            eprintln!("I need the number of participants and man !!\n");
             return false;
         }
 
         if let Ok(n_participants) = args[2].parse::<usize>() {
-            if let Ok(n_spenders) = args[3].parse::<usize>() {
-                if n_spenders >= n_participants || n_spenders < 1 {
-                    eprintln!("Invalid number of participants and/or spenders..");
+            if let Ok(n_man) = args[3].parse::<usize>() {
+                if n_man >= n_participants || n_man < 1 {
+                    eprintln!("Invalid number of participants and/or man..");
                     return false;
                 }
 
-                if let Err(e) = display_one(n_participants, n_spenders) {
+                if let Err(e) = display_one(n_participants, n_man) {
                     eprintln!("Miniscript error: {}", e);
                 }
             } else {
-                eprintln!("The number of spenders must be a number..");
+                eprintln!("The number of man must be a number..");
                 return false;
             }
         } else {
@@ -201,12 +200,12 @@ fn show_usage(args: &[String]) {
     println!("{} [help | getone | getall] (params)", args[0]);
     println!("  help: prints this message.");
     println!(
-        "  getone [number of participants] [number of spenders]: get the vault \
+        "  getone [number of participants] [number of man]: get the vault \
         and unvault script and policy for this configuration."
     );
     println!(
         "  getall: get all possible unvault configurations and theirwitness' \
-        weight as plots (n_part, n_spenders, WU)."
+        weight as plots (n_part, n_man, WU)."
     );
 }
 
