@@ -49,7 +49,7 @@ fn get_miniscripts(
     participants.extend(&spenders);
 
     Ok((
-        match vault_descriptor(participants)?.0 {
+        match deposit_descriptor(participants)?.0 {
             Descriptor::Wsh(ms) => ms,
             _ => unreachable!(),
         },

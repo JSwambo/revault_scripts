@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7.3"
-revault_tx = { git = "https://github.com/re-vault/revault_tx" }
+revault_tx = { git = "https://github.com/revault/revault_tx" }
